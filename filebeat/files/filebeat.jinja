@@ -1,5 +1,19 @@
 {%- set filebeat = salt['pillar.get']('filebeat', {}) %}
 filebeat:
+
+  modules:
+{%- set modules = filebeat.get('modules', {}) %}
+{%- for module in modules %}   
+  - module: {{ module.name }}
+{%- for detail in module.details %} 
+    {{ detail.name }}:
+      enabled: {{ detail.get('enabled', 'true') }}
+{%- if detail.get('paths') %}
+      var.paths: ["{{detail.paths|join('", "') }}"]
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+
   prospectors:
 {%- set log_paths = filebeat.get('log_paths', ['/var/log/auth.log', '/var/log/syslog']) %}
 {%- for log_path in log_paths %}
@@ -18,6 +32,12 @@ filebeat:
       force_close_files: {{ log_path.get('force_close_files', 'false') }}
       fields_under_root: {{ log_path.get('fields_under_root', 'false') }}
       close_older: {{ log_path.get('close_older', '1h') }}
+      {%- if log_path.get('json.enabled', False) %}
+      json.message_key: {{ log_path.get('json.message_key', 'json') }}
+      json.keys_under_root: {{ log_path.get('json.keys_under_root', 'true') }}
+      json.add_error_key: {{ log_path.get('json.add_error_key', 'true') }}
+      {%- endif %}
+
 {%- if 'multiline' in log_path %}
       multiline:
         pattern: "{{ log_path.multiline.get('pattern', '') }}"
@@ -46,22 +66,24 @@ output:
 {%- set elasticsearch = filebeat.get('elasticsearch', {}) %}
 {%- set logstash = filebeat.get('logstash', {}) %}
 
-{%- if filebeat.elasticsearch.get('enabled', False) %}
+{%- if elasticsearch.get('enabled', False) %}
   elasticsearch:
-    hosts: ["http://{{ filebeat.elasticsearch.server }}"]
+    hosts: ["http://{{ elasticsearch.server }}"]
 {%- endif %}
 
-{%- if filebeat.logstash.get('enabled', False) %}
+{%- if logstash.get('enabled', False) %}
   logstash:
-    hosts: ["{{ filebeat.logstash.server }}"]
+    hosts: {{ logstash.server }}
     worker: 1
     loadbalance: true
     index: filebeat
 
-{%- if 'tls' in filebeat.logstash %}
-{%- if filebeat.logstash.tls.get('enabled', False) %}
+{%- if 'tls' in logstash %}
+{%- if logstash.tls.get('enabled', False) %}
     tls:
-      certificate_authorities: ["{{ filebeat.logstash.tls.ssl_cert_path }}"]
+{%- if logstash.tls.get('ssl_cert_path') %}
+      certificate_authorities: ["{{ logstash.tls.ssl_cert_path }}"]
+{%- endif %}
 {%- endif %}
 {%- endif %}
 {%- endif %}
